@@ -9,9 +9,6 @@
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
-  [plugins.inputs]
-    # Désactiver le prérendu statique pour les pages dynamiques
-    skipPrerender = true
 
 # Ces redirections sont nécessaires pour les applications Next.js
 [[redirects]]
