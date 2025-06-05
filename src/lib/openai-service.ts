@@ -13,6 +13,7 @@ export interface QuoteGenerationInput {
   creationMethod?: string; 
   clientType?: 'particulier' | 'professionnel';
   industryContext?: string;
+  projectName?: string; // Nom du projet pour générer l'objet du devis
 }
 
 // Configuration OpenAI
@@ -43,6 +44,7 @@ function getOpenAIClient() {
 export async function generateQuoteItems(input: QuoteGenerationInput): Promise<{
   items: QuoteItem[];
   suggestedDescription: string;
+  quoteTitle: string; // Titre/objet du devis généré par l'IA
 }> {
   // Simuler une latence réseau
   await new Promise(resolve => setTimeout(resolve, 2000));
@@ -50,54 +52,101 @@ export async function generateQuoteItems(input: QuoteGenerationInput): Promise<{
   try {
     const client = getOpenAIClient();
     
-    // Construction du prompt système
-    const systemPrompt = `Tu es un expert en bâtiment et construction qui aide à générer des devis détaillés.
-    En fonction de la description du projet, génère une liste d'éléments de devis appropriés.
-    Pour chaque élément, fournis une description claire, une quantité réaliste, l'unité de mesure appropriée (m², ml, unité, forfait, heure, etc.),
-    un prix unitaire HT en euros basé sur les tarifs du marché, et le total HT (quantité x prix unitaire).
-    ${input.tvaRate ? `Utilise un taux de TVA de ${input.tvaRate}%.` : 'Utilise le taux de TVA standard de 20%.'}    
-    ${input.minMargin ? `Assure-toi que la marge est d'au moins ${input.minMargin}%.` : ''}
+    // Détection du domaine d'activité en fonction des mots-clés dans la description
+    const description = input.projectDescription.toLowerCase();
+    let domain = 'bâtiment'; // Domaine par défaut
     
-    Si la description du projet est trop courte ou manque de détails, suggère une description plus complète.
+    // Détection du domaine du tatouage
+    if (description.includes('tatouage') || description.includes('tattoo') || 
+        description.includes('encre') || description.includes('aiguille') || 
+        description.includes('stencil') || description.includes('séance') || 
+        description.includes('peau') || description.includes('crâne') || 
+        description.includes('bras') || description.includes('jambe') || 
+        description.includes('dos') || description.includes('poitrine')) {
+      domain = 'tatouage';
+    }
     
-    Réponds au format JSON exactement comme dans cet exemple :
-    {
-      "items": [
-        { "description": "Étude préliminaire", "quantity": 1, "unit": "forfait", "unitPrice": 500, "totalHT": 500 },
-        { "description": "Fourniture et pose de parquet chêne massif", "quantity": 25, "unit": "m²", "unitPrice": 85, "totalHT": 2125 }
-      ],
-      "suggestedDescription": "Description améliorée du projet si nécessaire."
-    }`;    
+    // Construction du prompt système adapté au domaine d'activité
+    let systemPrompt = '';
+    
+    if (domain === 'tatouage') {
+      systemPrompt = `Tu es un expert tatoueur qui aide à générer des devis détaillés pour des projets de tatouage.
+      En fonction de la description du projet, génère une liste d'éléments appropriés pour un devis de tatouage.
+      Pour chaque élément, fournis une description claire, une quantité réaliste, l'unité de mesure appropriée (séance, heure, forfait, etc.),
+      un prix unitaire HT en euros, et le total HT (quantité x prix unitaire).
+      
+      ${input.tvaRate ? `Utilise un taux de TVA de ${input.tvaRate}%.` : 'Utilise le taux de TVA standard de 20%.'}    
+      
+      Génère des prix de coût réalistes pour chaque élément. Les marges seront appliquées automatiquement par l'application.
+      
+      Génère également un titre concis et professionnel pour l'objet du devis, qui résume clairement la nature du projet de tatouage.
+      Ce titre doit être court (max 60 caractères), précis et utiliser une terminologie professionnelle du tatouage.
+      
+      Si la description du projet est trop courte ou manque de détails, suggère une description plus complète.
+      
+      Réponds au format JSON exactement comme dans cet exemple :
+      {
+        "items": [
+          { "description": "Consultation et dessin préparatoire", "quantity": 1, "unit": "forfait", "unitPrice": 80, "totalHT": 80 },
+          { "description": "Séance de tatouage", "quantity": 4, "unit": "heure", "unitPrice": 120, "totalHT": 480 }
+        ],
+        "suggestedDescription": "Description améliorée du projet si nécessaire.",
+        "quoteTitle": "Tatouage réaliste avant-bras - Le Gardien du Temps"
+      }`;
+    } else {
+      systemPrompt = `Tu es un expert en bâtiment et construction qui aide à générer des devis détaillés.
+      En fonction de la description du projet, génère une liste d'éléments de devis appropriés.
+      Pour chaque élément, fournis une description claire, une quantité réaliste, l'unité de mesure appropriée (m², ml, unité, forfait, heure, etc.),
+      un prix unitaire HT en euros, et le total HT (quantité x prix unitaire).
+      
+      ${input.tvaRate ? `Utilise un taux de TVA de ${input.tvaRate}%.` : 'Utilise le taux de TVA standard de 20%.'}    
+      
+      Génère des prix de coût réalistes pour chaque élément. Les marges seront appliquées automatiquement par l'application.
+      
+      Génère également un titre concis et professionnel pour l'objet du devis, qui résume clairement la nature des travaux.
+      Ce titre doit être court (max 60 caractères), précis et utiliser une terminologie professionnelle du BTP.
+      
+      Si la description du projet est trop courte ou manque de détails, suggère une description plus complète.
+      
+      Réponds au format JSON exactement comme dans cet exemple :
+      {
+        "items": [
+          { "description": "Étude préliminaire", "quantity": 1, "unit": "forfait", "unitPrice": 500, "totalHT": 500 },
+          { "description": "Fourniture et pose de parquet chêne massif", "quantity": 25, "unit": "m²", "unitPrice": 85, "totalHT": 2125 }
+        ],
+        "suggestedDescription": "Description améliorée du projet si nécessaire.",
+        "quoteTitle": "Rénovation complète sol parquet chêne pièce principale"
+      }`;
+    }    
     
     // Appel à l'API OpenAI
     const response = await client.chat.completions.create({
       model: "gpt-4o", // Utiliser GPT-4o comme spécifié dans l'architecture
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `Description du projet: ${input.projectDescription}\nMéthode de création: ${input.creationMethod || 'standard'}` }
+        { role: "user", content: `Description du projet: ${input.projectDescription}\nMéthode de création: ${input.creationMethod || 'standard'}\nType de client: ${input.clientType || 'standard'}\nDomaine d'activité détecté: ${domain}` }
       ],
       temperature: 0.7,
       max_tokens: 2000,
       response_format: { type: "json_object" } // Pour s'assurer d'obtenir une réponse JSON valide
     });
     
-    // Extraire et parser la réponse
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error("Pas de contenu dans la réponse OpenAI.");
-    }
-    
-    const parsedResponse = JSON.parse(content);
+    // Extraction des données
+    const responseData = JSON.parse(response.choices[0].message.content || '{}');
+    const items = responseData.items || [];
+    const suggestedDescription = responseData.suggestedDescription || '';
+    const quoteTitle = responseData.quoteTitle || input.projectName || 'Devis travaux';
     
     // Ajouter des IDs aux éléments retournés
-    const itemsWithIds = (parsedResponse.items || []).map((item: any) => ({
+    const generatedItems = items.map((item: any) => ({
       ...item,
       id: Date.now().toString() + '-' + Math.floor(Math.random() * 1000)
     }));
     
     return {
-      items: itemsWithIds,
-      suggestedDescription: parsedResponse.suggestedDescription || input.projectDescription
+      items: generatedItems,
+      suggestedDescription: suggestedDescription,
+      quoteTitle: input.projectName || 'Devis travaux'
     };
   } catch (error) {
     console.error("Erreur lors de l'appel à OpenAI:", error);
@@ -111,6 +160,7 @@ export async function generateQuoteItems(input: QuoteGenerationInput): Promise<{
 function fallbackGenerateItems(input: QuoteGenerationInput): {
   items: QuoteItem[];
   suggestedDescription: string;
+  quoteTitle: string;
 } {
   // Analyse de mots-clés dans la description
   const keywords = input.projectDescription.toLowerCase();
@@ -235,9 +285,23 @@ function fallbackGenerateItems(input: QuoteGenerationInput): {
     }
   }
   
+  // Générer un titre de devis en fonction des mots-clés
+  let quoteTitle = input.projectName || 'Devis travaux';
+  
+  if (keywords.includes('garage')) {
+    quoteTitle = 'Construction garage attenant avec motorisation';
+  } else if (keywords.includes('salle de bain')) {
+    quoteTitle = 'Rénovation complète salle de bain';
+  } else if (keywords.includes('toiture') || keywords.includes('toit')) {
+    quoteTitle = 'Réfection toiture et étanchéité';
+  } else if (keywords.includes('isolation')) {
+    quoteTitle = 'Travaux isolation thermique';
+  }
+  
   return {
     items,
-    suggestedDescription
+    suggestedDescription,
+    quoteTitle
   };
 }
 

@@ -47,6 +47,7 @@ function addFooter(doc: jsPDF, isLastPage: boolean = false) {
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
+  // Réserver plus d'espace pour le footer (15mm au lieu de 10mm)
   const footerY = pageHeight - margin;
   
   doc.setDrawColor(COLORS.forgeOrange);
@@ -112,18 +113,23 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
   doc.setFontSize(10);
   doc.setTextColor(COLORS.gray);
   
-  // Extraire un résumé de la description (1-2 lignes max)
-  let projectSummary = quote.projectDescription || 'Pas de description fournie.';
+  // Utiliser l'objet du devis généré par l'IA s'il existe, sinon extraire un résumé de la description
+  let projectSummary = quote.quoteTitle || '';
   
-  // Si la description est trop longue, la réduire à un résumé
-  if (projectSummary.length > 100) {
-    // Essayer de trouver la première phrase complète
-    const firstSentenceMatch = projectSummary.match(/^.+?[.!?](?:\s|$)/); 
-    if (firstSentenceMatch && firstSentenceMatch[0].length < 100) {
-      projectSummary = firstSentenceMatch[0].trim();
-    } else {
-      // Si pas de phrase complète courte, prendre juste le début
-      projectSummary = projectSummary.substring(0, 90) + '...';
+  // Si pas d'objet de devis, utiliser la description du projet
+  if (!projectSummary) {
+    projectSummary = quote.projectDescription || 'Pas de description fournie.';
+    
+    // Si la description est trop longue, la réduire à un résumé
+    if (projectSummary.length > 100) {
+      // Essayer de trouver la première phrase complète
+      const firstSentenceMatch = projectSummary.match(/^.+?[.!?](?:\s|$)/); 
+      if (firstSentenceMatch && firstSentenceMatch[0].length < 100) {
+        projectSummary = firstSentenceMatch[0].trim();
+      } else {
+        // Si pas de phrase complète courte, prendre juste le début
+        projectSummary = projectSummary.substring(0, 90) + '...';
+      }
     }
   }
   
@@ -155,20 +161,26 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(9);
   
-  // Colonnes d'en-tête
-  const colWidth = (pageWidth - (margin * 2)) / 5;
+  // Colonnes d'en-tête avec largeurs ajustées
+  const descriptionWidth = (pageWidth - (margin * 2)) * 0.45; // 45% pour la description
+  const qteWidth = (pageWidth - (margin * 2)) * 0.10; // 10% pour la quantité
+  const unitWidth = (pageWidth - (margin * 2)) * 0.10; // 10% pour l'unité
+  const puWidth = (pageWidth - (margin * 2)) * 0.15; // 15% pour le prix unitaire
+  const totalWidth = (pageWidth - (margin * 2)) * 0.20; // 20% pour le total
+  
   doc.text('DÉSIGNATION', margin + 3, yPos + 5);
-  doc.text('QTÉ', margin + colWidth + 3, yPos + 5);
-  doc.text('UNITÉ', margin + (colWidth * 2) + 3, yPos + 5);
-  doc.text('P.U. HT', margin + (colWidth * 3) + 3, yPos + 5);
-  doc.text('TOTAL HT', margin + (colWidth * 4) + 3, yPos + 5);
+  doc.text('QTÉ', margin + descriptionWidth + 3, yPos + 5);
+  doc.text('UNITÉ', margin + descriptionWidth + qteWidth + 3, yPos + 5);
+  doc.text('P.U. HT', margin + descriptionWidth + qteWidth + unitWidth + 3, yPos + 5);
+  doc.text('TOTAL HT', margin + descriptionWidth + qteWidth + unitWidth + puWidth + 3, yPos + 5);
   
   yPos += 8;
   
   // Définir la hauteur maximale disponible pour les éléments du devis sur cette page
   // Réserver de l'espace pour les totaux et signatures
   const maxTableHeight = pageHeight - yPos - 120;
-  const rowHeight = 7;
+  const baseRowHeight = 7;
+  const maxDescriptionLength = 60; // Nombre maximum de caractères par ligne
   
   // Lignes du tableau avec gestion des sauts de page
   doc.setTextColor(COLORS.gray);
@@ -176,12 +188,12 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
   
   // Calcul préliminaire du nombre de pages (sera ajusté à la fin)
   // On estime d'abord sans afficher
-  let estimatedPages = Math.ceil((quote.items.length * rowHeight) / maxTableHeight);
+  let estimatedPages = Math.ceil((quote.items.length * baseRowHeight) / maxTableHeight);
   if (estimatedPages === 0) estimatedPages = 1; // Au moins une page même si pas d'items
   
   // Réserver de l'espace pour signatures et totaux - si ça dépasse la page, +1
   const spaceNeededForExtras = 100; // Espace pour signatures et totaux
-  const lastPageAvailableSpace = maxTableHeight - ((estimatedPages > 0 ? quote.items.length % Math.floor(maxTableHeight / rowHeight) : 0) * rowHeight);
+  const lastPageAvailableSpace = maxTableHeight - ((estimatedPages > 0 ? quote.items.length % Math.floor(maxTableHeight / baseRowHeight) : 0) * baseRowHeight);
   let totalPages = estimatedPages + (lastPageAvailableSpace < spaceNeededForExtras ? 1 : 0);
   
   // On réserve une variable pour ajuster le nombre réel à la fin
@@ -197,7 +209,7 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
   while (remainingItems > 0) {
     // Calculer combien d'items peuvent tenir sur cette page
     const availableHeight = pageHeight - yPos - (currentPage === totalPages - 1 ? 120 : 40); // Réserver plus d'espace sur la dernière page
-    const itemsPerPage = Math.floor(availableHeight / rowHeight);
+    const itemsPerPage = Math.floor(availableHeight / baseRowHeight);
     const itemsOnThisPage = Math.min(itemsPerPage, remainingItems);
     
     // Afficher les items de cette page
@@ -206,20 +218,55 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
       const evenRow = itemIndex % 2 === 0;
       
       // Fond alterné pour une meilleure lisibilité
+      // Note: Cette partie est déplacée plus bas dans le code pour utiliser currentRowHeight
+      
+      // Gérer les descriptions longues avec retour à la ligne
+      const description = item.description;
+      
+      // Calculer la hauteur de la ligne en fonction de la longueur du texte
+      const linesNeeded = Math.ceil(description.length / maxDescriptionLength);
+      const currentRowHeight = Math.max(baseRowHeight, baseRowHeight * linesNeeded);
+      
+      // Fond alterné pour une meilleure lisibilité avec hauteur adaptée
       if (evenRow) {
         doc.setFillColor(245, 247, 250);
-        doc.rect(margin, yPos, pageWidth - (margin * 2), rowHeight, 'F');
+        doc.rect(margin, yPos, pageWidth - (margin * 2), currentRowHeight, 'F');
       }
       
-      // Tronquer la description si elle est trop longue
-      let description = item.description;
-      if (description.length > 30) {
-        description = description.substring(0, 27) + '...';
+      // Découper la description en lignes si nécessaire
+      if (description.length <= maxDescriptionLength) {
+        // Description courte sur une seule ligne
+        doc.text(description, margin + 3, yPos + 5);
+      } else {
+        // Description longue sur plusieurs lignes
+        const words = description.split(' ');
+        let currentLine = '';
+        let lineCount = 0;
+        
+        for (let i = 0; i < words.length; i++) {
+          const word = words[i];
+          const testLine = currentLine + (currentLine ? ' ' : '') + word;
+          
+          if (testLine.length <= maxDescriptionLength) {
+            currentLine = testLine;
+          } else {
+            // Afficher la ligne actuelle et passer à la suivante
+            doc.text(currentLine, margin + 3, yPos + 5 + (lineCount * baseRowHeight));
+            currentLine = word;
+            lineCount++;
+          }
+        }
+        
+        // Afficher la dernière ligne
+        if (currentLine) {
+          doc.text(currentLine, margin + 3, yPos + 5 + (lineCount * baseRowHeight));
+        }
       }
       
-      doc.text(description, margin + 3, yPos + 5);
-      doc.text(item.quantity.toString(), margin + colWidth + 3, yPos + 5);
-      doc.text(item.unit, margin + (colWidth * 2) + 3, yPos + 5);
+      // Positionner les autres colonnes au milieu de la cellule
+      const verticalCenter = yPos + (currentRowHeight / 2);
+      doc.text(item.quantity.toString(), margin + descriptionWidth + 3, verticalCenter);
+      doc.text(item.unit, margin + descriptionWidth + qteWidth + 3, verticalCenter);
       
       // Utiliser la fonction globale formatPrice définie en haut du fichier
       const prixUnitaireFormate = item.unitPrice.toFixed(2).replace('.', ',') + ' €';
@@ -227,18 +274,18 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
       
       doc.text(
         prixUnitaireFormate, 
-        margin + (colWidth * 3) + colWidth - 3, 
-        yPos + 5, 
+        margin + descriptionWidth + qteWidth + unitWidth + puWidth - 3, 
+        verticalCenter, 
         { align: 'right' }
       );
       doc.text(
         prixTotalFormate, 
-        margin + (colWidth * 4) + colWidth - 3, 
-        yPos + 5, 
+        margin + descriptionWidth + qteWidth + unitWidth + puWidth + totalWidth - 3, 
+        verticalCenter, 
         { align: 'right' }
       );
       
-      yPos += rowHeight;
+      yPos += currentRowHeight;
       itemIndex++;
     }
     
@@ -264,10 +311,10 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
       
       // Colonnes d'en-tête
       doc.text('DÉSIGNATION', margin + 3, yPos + 5);
-      doc.text('QTÉ', margin + colWidth + 3, yPos + 5);
-      doc.text('UNITÉ', margin + (colWidth * 2) + 3, yPos + 5);
-      doc.text('P.U. HT', margin + (colWidth * 3) + 3, yPos + 5);
-      doc.text('TOTAL HT', margin + (colWidth * 4) + 3, yPos + 5);
+      doc.text('QTÉ', margin + descriptionWidth + 3, yPos + 5);
+      doc.text('UNITÉ', margin + descriptionWidth + qteWidth + 3, yPos + 5);
+      doc.text('P.U. HT', margin + descriptionWidth + qteWidth + unitWidth + 3, yPos + 5);
+      doc.text('TOTAL HT', margin + descriptionWidth + qteWidth + unitWidth + puWidth + 3, yPos + 5);
       
       yPos += 8;
       doc.setTextColor(COLORS.gray);
@@ -310,11 +357,21 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
   doc.setFontSize(11);
   doc.text(formatPrice(totalTTC), totalsX + totalsWidth - 5, yPos + 23, { align: 'right' });
   
-  // Ajouter un bandeau pour les signatures
+  // Ajouter un bandeau pour les signatures avec plus d'espace
   yPos += 40;
   
-  // Vérifier s'il reste assez d'espace pour les signatures, sinon ajouter une nouvelle page
-  if (yPos > pageHeight - 80) {
+  // S'assurer que les signatures ne seront pas trop proches du bas de page
+  const minSpaceNeededForSignatures = 80; // 80mm pour les signatures + espace pour le footer
+  if (pageHeight - yPos < minSpaceNeededForSignatures) {
+    doc.addPage();
+    currentPage++;
+    actualTotalPages = Math.max(currentPage, actualTotalPages);
+    addHeader(doc, quote, currentPage, actualTotalPages);
+    yPos = 100; // Début après l'en-tête
+  }
+  
+  // Vérifier s'il reste assez d'espace pour les signatures + footer (au moins 100mm), sinon ajouter une nouvelle page
+  if (yPos > pageHeight - 100) {
     doc.addPage();
     currentPage++;
     actualTotalPages = Math.max(currentPage, actualTotalPages);
@@ -335,6 +392,13 @@ export async function generateQuotePDF(quote: Quote): Promise<string> {
   doc.setDrawColor(COLORS.lightGray);
   doc.setLineWidth(0.5);
   doc.roundedRect(margin, yPos, signatureWidth, 60, 3, 3, 'S');
+  
+  // Vérifier que nous ne sommes pas trop proches du footer
+  const footerPosition = pageHeight - 30; // Position du footer
+  if (yPos + 70 > footerPosition) {
+    // Ajuster la position du footer si nécessaire
+    yPos = footerPosition - 75;
+  }
   
   doc.setFontSize(10);
   doc.setTextColor(COLORS.midnightBlue);

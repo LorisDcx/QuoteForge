@@ -11,6 +11,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { generateQuoteItems } from '@/lib/openai-service';
 import { generateQuotePDF, downloadQuotePDF } from '@/lib/pdf-service';
+import { SimplePdfImport } from '@/components/import/simple-pdf-import';
+import { ExtractionResult } from '@/lib/pdf-parser';
 import { Quote, QuoteItem } from '@/types/quote';
 
 // Utiliser les types importés depuis @/types/quote
@@ -20,6 +22,7 @@ export default function QuoteEditor() {
   const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  // La variable creationMethod est déjà définie plus bas
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -59,6 +62,77 @@ export default function QuoteEditor() {
     }
   };
   
+  // Fonction pour appliquer la marge aux prix et arrondir à l'euro
+  const applyMarginToPrice = (costPrice: number, margin: number) => {
+    if (!margin || margin <= 0) return Math.round(costPrice);
+    // Formule: Prix de vente = Prix coûtant / (1 - marge/100)
+    // Arrondir à l'euro le plus proche
+    return Math.round(costPrice / (1 - margin/100));
+  };
+  
+  // Fonction pour recalculer tous les prix avec la marge actuelle
+  const recalculatePricesWithMargin = (items: any[], margin: number) => {
+    return items.map(item => {
+      // Stocker le prix coûtant dans une propriété séparée si ce n'est pas déjà fait
+      if (!item.costPrice) {
+        item.costPrice = item.unitPrice;
+      }
+      
+      // Appliquer la marge au prix coûtant
+      const newUnitPrice = applyMarginToPrice(item.costPrice, margin);
+      
+      return {
+        ...item,
+        unitPrice: newUnitPrice,
+        totalHT: item.quantity * newUnitPrice
+      };
+    });
+  };
+  
+  // Fonction pour traiter l'importation de données depuis un PDF (CCTP/DPGF)
+  const handlePdfImport = (result: ExtractionResult) => {
+    if (result.success && result.items.length > 0) {
+      // Mettre à jour le titre du devis si disponible
+      if (result.title) {
+        setQuote(prev => ({
+          ...prev,
+          quoteTitle: result.title
+        }));
+      }
+      
+      // Mettre à jour les informations client si disponibles
+      if (result.clientInfo) {
+        setQuote(prev => ({
+          ...prev,
+          clientName: result.clientInfo?.name || prev.clientName,
+          clientAddress: result.clientInfo?.address || prev.clientAddress,
+          clientEmail: result.clientInfo?.email || prev.clientEmail,
+          clientPhone: result.clientInfo?.phone || prev.clientPhone,
+          clientSiret: result.clientInfo?.siret || prev.clientSiret
+        }));
+      }
+      
+      // Ajouter les éléments importés au devis
+      // On génère de nouveaux IDs pour éviter les conflits
+      const importedItems = result.items.map(item => ({
+        ...item,
+        id: Date.now().toString() + '-' + Math.random().toString(36).substr(2, 9)
+      }));
+      
+      setQuote(prev => ({
+        ...prev,
+        items: [...prev.items, ...importedItems]
+      }));
+      
+      // Notification de succès
+      // toast({
+      //   title: "Import réussi",
+      //   description: `${importedItems.length} élément(s) importé(s) avec succès.`,
+      //   variant: "success"
+      // });
+    }
+  };
+  
   // Fonction pour générer des éléments de devis avec l'IA
   const handleGenerateItems = async () => {
     if (!prompt.trim()) return;
@@ -74,20 +148,32 @@ export default function QuoteEditor() {
         clientName: quote.clientName,
         industryContext: 'bâtiment',
         tvaRate: quote.tvaRate || 20,
-        minMargin: quote.minMargin
+        projectName: quote.quoteTitle // Envoyer le titre actuel comme référence
       });
       
-      // Formater les éléments pour respecter notre structure
-      const formattedItems = result.items.map(item => ({
-        ...item,
-        id: Math.random().toString(36).substr(2, 9),
-        totalHT: item.quantity * item.unitPrice
-      }));
+      // Formater les éléments pour respecter notre structure et stocker le prix coûtant
+      const formattedItems = result.items.map(item => {
+        const costPrice = item.unitPrice; // Stocker le prix coûtant original
+        const unitPrice = applyMarginToPrice(costPrice, quote.minMargin || 0);
+        
+        return {
+          ...item,
+          id: Math.random().toString(36).substr(2, 9),
+          costPrice: costPrice,
+          unitPrice: unitPrice,
+          totalHT: item.quantity * unitPrice
+        };
+      });
       
       // Mettre à jour la description du projet si elle est vide
       let updatedQuote = {...quote};
       if (!updatedQuote.projectDescription.trim() && result.suggestedDescription) {
         updatedQuote.projectDescription = result.suggestedDescription;
+      }
+      
+      // Mettre à jour l'objet du devis avec celui généré par l'IA
+      if (result.quoteTitle) {
+        updatedQuote.quoteTitle = result.quoteTitle;
       }
       
       // Ajouter les nouveaux éléments au devis
@@ -130,7 +216,7 @@ export default function QuoteEditor() {
   });
   
   // Stocke la méthode de création choisie
-  const [creationMethod, setCreationMethod] = useState<string | null>(null);
+  const [creationMethod, setCreationMethod] = useState<'ai' | 'pdf' | 'image' | 'manual' | 'edit' | 'text' | 'cctp' | null>('ai');
 
   // Récupérer le devis depuis localStorage ou le charger en mode édition
   useEffect(() => {
@@ -218,6 +304,15 @@ export default function QuoteEditor() {
           <h1 className="text-2xl font-heading font-bold text-midnight-blue">
             {quoteId ? `Modifier le devis ${quoteId}` : 'Créer un nouveau devis'}
           </h1>
+          <Button 
+            variant="default" 
+            size="sm"
+            className="ml-4 bg-midnight-blue text-white hover:bg-midnight-blue/90 flex items-center gap-1"
+            onClick={() => setCreationMethod('pdf')}
+          >
+            <FileUp className="w-4 h-4" />
+            Importer CCTP/DPGF
+          </Button>
         </div>
         <div className="flex gap-2">
           <Button 
@@ -325,6 +420,8 @@ export default function QuoteEditor() {
           )}
         </div>
       </div>
+      
+      {/* Le dialogue d'import a été remplacé par un composant intégré directement dans l'interface */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Informations client */}
@@ -335,18 +432,33 @@ export default function QuoteEditor() {
           </h2>
           
           <div className="space-y-4">
-            <div>
+            <div className="mb-4">
+              <label className="block text-sm text-gray-600 mb-1" htmlFor="quoteTitle">
+                Objet du devis
+              </label>
+              <input
+                type="text"
+                id="quoteTitle"
+                name="quoteTitle"
+                value={quote.quoteTitle || ''}
+                onChange={(e) => setQuote({...quote, quoteTitle: e.target.value})}
+                className="w-full p-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50"
+                placeholder="Objet du devis (généré automatiquement par l'IA)"
+              />
+            </div>
+            
+            <div className="mb-4">
               <label className="block text-sm text-gray-600 mb-1" htmlFor="clientName">
-                Nom du client / Société
+                Nom du client
               </label>
               <input
                 type="text"
                 id="clientName"
                 name="clientName"
-                value={quote.clientName}
+                value={quote.clientName || ''}
                 onChange={(e) => setQuote({...quote, clientName: e.target.value})}
                 className="w-full p-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50"
-                placeholder="Ex: Dupont Construction"
+                placeholder="Nom du client"
               />
             </div>
             
@@ -357,7 +469,7 @@ export default function QuoteEditor() {
               <textarea
                 id="clientAddress"
                 name="clientAddress"
-                value={quote.clientAddress}
+                value={quote.clientAddress || ''}
                 onChange={(e) => setQuote({...quote, clientAddress: e.target.value})}
                 className="w-full p-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50"
                 rows={3}
@@ -412,36 +524,56 @@ export default function QuoteEditor() {
               />
             </div>
             
-            <div>
-              <label className="block text-sm text-gray-600 mb-1" htmlFor="tvaRate">
-                Taux de TVA
-              </label>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600 mr-1" htmlFor="tvaRate">TVA</label>
-                <select 
-                  id="tvaRate"
-                  value={quote.tvaRate}
-                  onChange={(e) => setQuote({...quote, tvaRate: Number(e.target.value)})}
-                  className="p-1 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#FF6B35]/50"
-                >
-                  <option value="5.5">5.5%</option>
-                  <option value="10">10%</option>
-                  <option value="20">20%</option>
-                </select>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1" htmlFor="tvaRate">
+                  Taux de TVA
+                </label>
+                <div className="flex">
+                  <select
+                    id="tvaRate"
+                    value={quote.tvaRate}
+                    onChange={(e) => setQuote({...quote, tvaRate: Number(e.target.value)})}
+                    className="w-full p-2 border border-gray-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50"
+                  >
+                    <option value="20">20%</option>
+                    <option value="10">10%</option>
+                    <option value="5.5">5.5%</option>
+                    <option value="0">0% (export)</option>
+                  </select>
+                  <span className="bg-gray-100 border border-gray-200 border-l-0 rounded-r-md px-3 py-2">%</span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600 mr-1" htmlFor="minMargin">Marge min</label>
-                <input 
-                  id="minMargin"
-                  type="number" 
-                  min="0"
-                  max="100"
-                  placeholder="20"
-                  className="w-16 p-1 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#FF6B35]/50"
-                  value={quote.minMargin || ''}
-                  onChange={(e) => setQuote({...quote, minMargin: e.target.value ? parseFloat(e.target.value) : undefined})}
-                />
-                <span className="text-sm text-gray-500">%</span>
+              
+              <div>
+                <label className="block text-sm text-gray-600 mb-1" htmlFor="minMargin">
+                  Marge minimale
+                </label>
+                <div className="flex">
+                  <input 
+                    id="minMargin"
+                    type="number" 
+                    min="0"
+                    max="100"
+                    placeholder="20"
+                    className="w-full p-2 border border-gray-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50"
+                    value={quote.minMargin || ''}
+                    onChange={(e) => {
+                      const newMargin = e.target.value ? parseFloat(e.target.value) : undefined;
+                      
+                      // Mettre à jour la marge
+                      const updatedQuote = {...quote, minMargin: newMargin};
+                      
+                      // Recalculer tous les prix si des éléments existent
+                      if (updatedQuote.items.length > 0 && newMargin !== undefined) {
+                        updatedQuote.items = recalculatePricesWithMargin(updatedQuote.items, newMargin);
+                      }
+                      
+                      setQuote(updatedQuote);
+                    }}
+                  />
+                  <span className="bg-gray-100 border border-gray-200 border-l-0 rounded-r-md px-3 py-2">%</span>
+                </div>
               </div>
             </div>
           </div>
@@ -498,16 +630,16 @@ export default function QuoteEditor() {
             <>
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <FileUp className="w-5 h-5 text-[#FF6B35]" />
-                Import de PDF
+                Import de CCTP / DPGF
               </h2>
-              <div className="p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-center">
+              <div 
+                className="p-6 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-center"
+              >
                 <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="font-medium text-gray-700 mb-2">Déposez votre fichier PDF ici</h3>
-                <p className="text-sm text-gray-500 mb-4">ou</p>
-                <Button variant="outline" className="mb-4">
-                  Sélectionner un fichier
-                </Button>
-                <p className="text-xs text-gray-500">PDF, DOC, DOCX - 10MB max</p>
+                <h3 className="font-medium text-gray-700 mb-2">Importer un CCTP ou DPGF</h3>
+                <div className="mt-4">
+                  <SimplePdfImport onImport={handlePdfImport} />
+                </div>
               </div>
             </>
           ) : creationMethod === 'image' ? (
@@ -639,16 +771,18 @@ export default function QuoteEditor() {
               <tbody>
                 {quote.items.map((item, index) => (
                   <tr key={item.id} className="border-b border-gray-100 hover:bg-gray-50">
-                    <td className="p-3">
-                      <input
-                        type="text"
+                    <td className="p-3" style={{ maxWidth: '300px' }}>
+                      <textarea
+                        rows={Math.min(3, Math.max(1, Math.ceil(item.description.length / 40)))}
                         value={item.description}
                         onChange={(e) => {
                           const newItems = [...quote.items];
                           newItems[index].description = e.target.value;
                           setQuote({...quote, items: newItems});
                         }}
-                        className="w-full p-1 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#FF6B35]/50"
+                        className="w-full p-1 border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#FF6B35]/50 resize-none"
+                        style={{ minHeight: '32px' }}
+                        placeholder="Description de l'élément"
                       />
                     </td>
                     <td className="p-3">
@@ -688,7 +822,11 @@ export default function QuoteEditor() {
                         value={item.unitPrice}
                         onChange={(e) => {
                           const newItems = [...quote.items];
-                          newItems[index].unitPrice = Number(e.target.value);
+                          // Mettre à jour le prix coûtant (sans arrondi)
+                          const newCostPrice = Number(e.target.value) / (1 - (quote.minMargin || 0)/100);
+                          newItems[index].costPrice = newCostPrice;
+                          // Le prix unitaire est déjà arrondi car saisi par l'utilisateur
+                          newItems[index].unitPrice = Math.round(Number(e.target.value));
                           newItems[index].totalHT = newItems[index].quantity * newItems[index].unitPrice;
                           setQuote({...quote, items: newItems});
                         }}

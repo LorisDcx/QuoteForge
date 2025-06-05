@@ -10,9 +10,6 @@ export default function NewQuotePage() {
   const router = useRouter();
   const [isCreating, setIsCreating] = useState(false);
   const [quoteData, setQuoteData] = useState({
-    clientName: '',
-    clientEmail: '',
-    tvaRate: '20',
     companyName: '',
     companyAddress: '',
     companyPhone: '',
@@ -28,10 +25,7 @@ export default function NewQuotePage() {
     let propName = id;
     
     // Transformer les noms de champs en propriétés selon notre structure d'objet
-    if (id === 'client-name') propName = 'clientName';
-    else if (id === 'client-email') propName = 'clientEmail';
-    else if (id === 'tva-rate') propName = 'tvaRate';
-    else if (id === 'company-name') propName = 'companyName';
+    if (id === 'company-name') propName = 'companyName';
     else if (id === 'company-address') propName = 'companyAddress';
     else if (id === 'company-phone') propName = 'companyPhone';
     else if (id === 'company-siret') propName = 'companySiret';
@@ -44,9 +38,9 @@ export default function NewQuotePage() {
   };
 
   const handleProceedToEditor = () => {
-    // Vérifier que le nom du client est renseigné
-    if (!quoteData.clientName.trim()) {
-      alert("Veuillez indiquer le nom du client");
+    // Vérifier que le nom de l'entreprise est renseigné
+    if (!quoteData.companyName.trim()) {
+      alert("Veuillez indiquer le nom de votre entreprise");
       return;
     }
 
@@ -61,17 +55,17 @@ export default function NewQuotePage() {
       // Générer un identifiant unique
       const newId = String(Math.floor(1000 + Math.random() * 9000));
       
-      // Stocker les données du client dans localStorage pour les récupérer dans l'éditeur
-      const clientData = {
+      // Préparer les données pour le stockage
+      const newQuoteData = {
         id: newId,
-        clientName: quoteData.clientName,
-        clientEmail: quoteData.clientEmail,
+        // Pas d'informations client ici, elles seront ajoutées dans l'éditeur
+        clientName: '',
+        clientEmail: '',
         clientAddress: '',
         clientPhone: '',
         clientSiret: '',
-        tvaRate: parseFloat(quoteData.tvaRate),
-        // Ne pas définir minMargin ici car il sera ajouté dans l'éditeur
-        // Ajouter les informations d'entreprise
+        tvaRate: 20, // Valeur par défaut, à ajuster dans l'éditeur
+        // Informations d'entreprise
         companyName: quoteData.companyName,
         companyAddress: quoteData.companyAddress,
         companyPhone: quoteData.companyPhone,
@@ -87,7 +81,7 @@ export default function NewQuotePage() {
       };
       
       // Stocker temporairement pour l'éditeur
-      localStorage.setItem('currentQuoteData', JSON.stringify(clientData));
+      localStorage.setItem('currentQuoteData', JSON.stringify(newQuoteData));
       
       // Rediriger vers l'éditeur de devis
       router.push('/quotes/editor');
@@ -116,58 +110,12 @@ export default function NewQuotePage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* Informations client */}
         <div className="bg-white p-6 rounded-lg shadow-sm">
-          <h2 className="text-xl font-semibold mb-4">Informations client</h2>
+          <h2 className="text-xl font-semibold mb-4">Nouveau devis</h2>
           <div className="space-y-4">
-            <h3 className="font-medium text-gray-800 mb-3">Informations client</h3>
-            <div>
-              <label className="block text-sm text-gray-600 mb-1" htmlFor="client-name">
-                Nom du client
-              </label>
-              <input
-                type="text"
-                id="client-name"
-                className="w-full p-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50"
-                placeholder="Ex: Dupont Construction"
-                value={quoteData.clientName}
-                onChange={handleInputChange}
-              />
-            </div>
 
-            <div>
-              <label className="block text-sm text-gray-600 mb-1" htmlFor="client-email">
-                Email du client
-              </label>
-              <input
-                type="email"
-                id="client-email"
-                className="w-full p-2 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50"
-                placeholder="Ex: contact@dupont-construction.fr"
-                value={quoteData.clientEmail}
-                onChange={handleInputChange}
-              />
-            </div>
 
-            <div>
-              <label className="block text-sm text-gray-600 mb-1" htmlFor="tva-rate">
-                Taux de TVA
-              </label>
-              <div className="flex">
-                <select
-                  id="tva-rate"
-                  className="w-full p-2 border border-gray-200 rounded-l-md focus:outline-none focus:ring-2 focus:ring-[#FF6B35]/50"
-                  value={quoteData.tvaRate}
-                  onChange={handleInputChange}
-                >
-                  <option value="20">20%</option>
-                  <option value="10">10%</option>
-                  <option value="5.5">5.5%</option>
-                  <option value="0">0% (export)</option>
-                </select>
-                <span className="bg-gray-100 border border-gray-200 border-l-0 rounded-r-md px-3 py-2">%</span>
-              </div>
-            </div>
 
-            <h3 className="font-medium text-gray-800 mt-6 mb-3">Informations de votre entreprise</h3>
+            <h3 className="font-medium text-gray-800 mb-3">Informations de votre entreprise</h3>
             <div>
               <label className="block text-sm text-gray-600 mb-1" htmlFor="company-name">
                 Nom de votre entreprise
@@ -313,7 +261,7 @@ export default function NewQuotePage() {
             <Button 
               variant="forge" 
               onClick={handleProceedToEditor}
-              disabled={isCreating || !quoteData.clientName || !selectedMethod}
+              disabled={isCreating || !quoteData.companyName || !selectedMethod}
               className="px-4 py-2 flex items-center gap-2"
             >
               {isCreating ? (

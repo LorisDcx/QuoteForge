@@ -4,7 +4,8 @@ export interface QuoteItem {
   description: string;
   quantity: number;
   unit: string;
-  unitPrice: number;
+  unitPrice: number;  // Prix de vente avec marge
+  costPrice?: number; // Prix coûtant sans marge
   totalHT: number;
 }
 
@@ -16,6 +17,7 @@ export interface Quote {
   clientEmail: string;
   clientPhone: string;
   clientSiret?: string;
+  quoteTitle?: string;  // Objet du devis généré par l'IA
   projectDescription: string;
   items: QuoteItem[];
   date: string;
