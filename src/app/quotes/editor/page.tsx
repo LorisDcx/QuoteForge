@@ -261,7 +261,7 @@ function QuoteEditorContent({ searchParams }: { searchParams: URLSearchParams | 
       }
     } else {
       // Sinon, vérifier si on est en mode édition d'un devis existant
-      const id = searchParams.get('id');
+      const id = searchParams?.get('id');
       if (id) {
         setQuoteId(id);
         setIsLoading(true);
