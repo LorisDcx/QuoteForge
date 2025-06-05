@@ -1,14 +1,27 @@
 [build]
   command = "npm run build"
   publish = ".next"
+  
+  # Déclarer explicitement les variables d'environnement requises
+  [build.environment]
+    NEXT_PUBLIC_OPENAI_API_KEY = ""
+    OPENAI_API_KEY = ""
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
+  [plugins.inputs]
+    # Désactiver le prérendu statique pour les pages dynamiques
+    skipPrerender = true
 
 # Ces redirections sont nécessaires pour les applications Next.js
 [[redirects]]
   from = "/_next/static/*"
   to = "/static/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/quotes/editor"
+  to = "/.netlify/functions/next/quotes/editor"
   status = 200
 
 [[redirects]]

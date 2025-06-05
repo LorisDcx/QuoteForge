@@ -1,6 +1,11 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+
+// Désactiver le prérendu statique pour cette page
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 

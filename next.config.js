@@ -5,9 +5,16 @@ const nextConfig = {
   images: {
     domains: ['images.unsplash.com'],
   },
-  experimental: {
-    // Configuration expérimentale (si nécessaire)
+  // Désactiver le prérendu statique pour certaines pages
+  exportPathMap: async function () {
+    return {
+      '/': { page: '/' },
+      '/quotes': { page: '/quotes' },
+      // Ne pas inclure /quotes/editor dans le prérendu statique
+    };
   },
+  // Configuration pour Netlify
+  output: 'standalone',
 };
 
 module.exports = nextConfig;
