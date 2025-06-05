@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useEffect } from 'react';
+
+// Cette directive indique à Next.js de toujours rendre cette page côté client
+export const dynamic = "force-dynamic";
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { 

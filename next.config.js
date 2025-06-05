@@ -12,11 +12,6 @@ const nextConfig = {
     // Vous pouvez utiliser un ID de build fixe pour améliorer la mise en cache
     return 'quoteforge-build'
   },
-  // Désactiver le prérendu statique pour certaines pages
-  experimental: {
-    // Permettre de désactiver le prérendu statique pour certaines pages
-    serverComponentsExternalPackages: ['next'],
-  },
 };
 
 module.exports = nextConfig;
