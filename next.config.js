@@ -13,9 +13,7 @@ const nextConfig = {
     return 'quoteforge-build'
   },
   // Désactiver le téléchargement des polices pendant le build
-  experimental: {
-    optimizeFonts: false,
-  },
+  optimizeFonts: false,
 };
 
 module.exports = nextConfig;

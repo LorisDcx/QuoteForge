@@ -1,10 +1,16 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 
 // Cette directive indique à Next.js de toujours rendre cette page côté client
 export const dynamic = "force-dynamic";
 import { useRouter, useSearchParams } from 'next/navigation';
+
+// Composant client pour utiliser useSearchParams en toute sécurité
+function SearchParamsWrapper({ children }: { children: (params: URLSearchParams | null) => React.ReactNode }) {
+  const searchParams = useSearchParams();
+  return <>{children(searchParams)}</>;
+}
 import Link from 'next/link';
 import { 
   ArrowLeft, Save, Trash2, Download, Send, Plus, 
@@ -20,9 +26,20 @@ import { Quote, QuoteItem } from '@/types/quote';
 
 // Utiliser les types importés depuis @/types/quote
 
+// Composant d'exportation par défaut qui utilise Suspense
 export default function QuoteEditor() {
+  return (
+    <Suspense fallback={<div className="p-8 flex justify-center"><Loader2 className="animate-spin" /></div>}>
+      <SearchParamsWrapper>
+        {(searchParams) => <QuoteEditorContent searchParams={searchParams} />}
+      </SearchParamsWrapper>
+    </Suspense>
+  );
+}
+
+// Composant principal qui sera enveloppé dans Suspense
+function QuoteEditorContent({ searchParams }: { searchParams: URLSearchParams | null }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   // La variable creationMethod est déjà définie plus bas
