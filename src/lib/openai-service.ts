@@ -25,10 +25,10 @@ function getOpenAIClient() {
     // Récupérer la clé API depuis les variables d'environnement
     // Note: Pour un MVP, vous pouvez définir une clé API temporaire directement ici
     // En production, utilisez toujours des variables d'environnement ou un backend
-    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY;
+    const apiKey = process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
     
     if (!apiKey) {
-      throw new Error("Clé API OpenAI non définie. Veuillez configurer NEXT_PUBLIC_OPENAI_API_KEY dans .env.local.");
+      throw new Error("Clé API OpenAI non définie. Veuillez configurer OPENAI_API_KEY ou NEXT_PUBLIC_OPENAI_API_KEY dans les variables d'environnement.");
     }
     
     openai = new OpenAI({
