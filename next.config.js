@@ -5,16 +5,13 @@ const nextConfig = {
   images: {
     domains: ['images.unsplash.com'],
   },
-  // Désactiver le prérendu statique pour certaines pages
-  exportPathMap: async function () {
-    return {
-      '/': { page: '/' },
-      '/quotes': { page: '/quotes' },
-      // Ne pas inclure /quotes/editor dans le prérendu statique
-    };
-  },
   // Configuration pour Netlify
   output: 'standalone',
+  // Configuration pour le prérendu statique avec App Router
+  generateBuildId: async () => {
+    // Vous pouvez utiliser un ID de build fixe pour améliorer la mise en cache
+    return 'quoteforge-build'
+  },
 };
 
 module.exports = nextConfig;
