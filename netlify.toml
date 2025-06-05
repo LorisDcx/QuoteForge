@@ -6,6 +6,8 @@
   [build.environment]
     NEXT_PUBLIC_OPENAI_API_KEY = ""
     OPENAI_API_KEY = ""
+    # Désactiver le prérendu statique pour la page quotes/editor
+    NEXT_PUBLIC_DISABLE_PRERENDER = "true"
 
 [[plugins]]
   package = "@netlify/plugin-nextjs"
